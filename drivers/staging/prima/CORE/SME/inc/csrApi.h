@@ -893,7 +893,7 @@ typedef struct tagCsrRoamProfile
      * It has the IE byte stream for additional IE,
      * which can be WSC IE and/or P2P IE
      */
-    tANI_U8  addIEScan[SIR_MAC_MAX_IE_LENGTH+2];       //Additional IE information.
+    tANI_U8  addIEScan[SIR_MAC_MAX_ADD_IE_LENGTH+2];       //Additional IE information.
     tANI_U32 nAddIEAssocLength;   //The byte count in the pAddIE for assoc
     tANI_U8 *pAddIEAssoc;       //If not null, it has the IE byte stream for additional IE, which can be WSC IE and/or P2P IE
 
@@ -1220,6 +1220,11 @@ typedef struct tagCsrRoamInfo
     tSirEseBcnReportRsp *pEseBcnReportRsp;
 #endif /* FEATURE_WLAN_ESE_UPLOAD */
 #endif
+
+#ifdef WLAN_FEATURE_VOWIFI_11R
+    tANI_BOOLEAN is11rAssoc;
+#endif
+
     void* pRemainCtx;
     tANI_U32 rxChan;
 
@@ -1386,6 +1391,7 @@ typedef struct tagCsrLinkEstablishParams
 {
     tSirMacAddr peerMac;
     tANI_U8 uapsdQueues;
+    tANI_U8 qos;
     tANI_U8 maxSp;
     tANI_U8 isBufSta;
     tANI_U8 isOffChannelSupported;

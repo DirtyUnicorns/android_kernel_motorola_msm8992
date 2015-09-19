@@ -7176,16 +7176,7 @@ eHalStatus sme_QosAddTsSuccessFnp(tpAniSirGlobal pMac, tListElem *pEntry)
       {
          //For downgrading purpose Hdd set WmmTspecValid to false during roaming
          //So need to set that flag we need to call the hdd in successful case.
-         if((hdd_status == SME_QOS_STATUS_SETUP_SUCCESS_IND)
-#if defined (WLAN_FEATURE_VOWIFI_11R)
-            &&
-            (!csrRoamIs11rAssoc(pMac))
-#endif
-#if defined(FEATURE_WLAN_ESE)
-            &&
-            (!csrRoamIsCCXAssoc(pMac))
-#endif
-           )
+         if(hdd_status == SME_QOS_STATUS_SETUP_SUCCESS_IND)
          {
              VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
                        "%s calling hdd_wmm_smecallback during  roaming for ac = %d", __func__, ac);
@@ -7648,6 +7639,99 @@ v_BOOL_t sme_QosIsTSInfoAckPolicyValid(tpAniSirGlobal pMac,
   }
 
   vos_mem_free(pIes);
+  return VOS_TRUE;
+}
+
+/*--------------------------------------------------------------------------
+  \brief sme_QosTspecActive() - The SME QoS API exposed to HDD to
+  check no of active Tspecs
+
+  \param pMac - The handle returned by macOpen.
+  \param ac - Determines type of Access Category
+  \param sessionId - sessionId returned by sme_OpenSession.
+
+  \return VOS_TRUE -When there is no error with pSession
+
+  \sa
+  --------------------------------------------------------------------------*/
+v_BOOL_t sme_QosTspecActive(tpAniSirGlobal pMac,
+    WLANTL_ACEnumType ac, v_U8_t sessionId, v_U8_t *pActiveTspec)
+{
+  sme_QosSessionInfo *pSession = NULL;
+  sme_QosACInfo *pACInfo = NULL;
+
+  if( !CSR_IS_SESSION_VALID( pMac, sessionId ) )
+  {
+     VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+               "%s: %d: Session Id %d is invalid",
+               __func__, __LINE__,
+               sessionId);
+     return VOS_FALSE;
+  }
+
+  pSession = &sme_QosCb.sessionInfo[sessionId];
+
+  if (NULL == pSession)
+  {
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+         "%s: %d pSession not found sessionId:%d",__func__,__LINE__,sessionId);
+      return VOS_FALSE;
+  }
+
+  if( !pSession->sessionActive )
+  {
+     VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+               "%s: %d: Session %d is inactive",
+               __func__, __LINE__,
+               sessionId);
+     return VOS_FALSE;
+  }
+
+  VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO_HIGH,
+            "%s: %d: Session %d is active", __func__, __LINE__, sessionId);
+
+  pACInfo = &pSession->ac_info[ac];
+
+  // Does this AC have QoS active?
+  if( SME_QOS_QOS_ON == pACInfo->curr_state )
+  {
+     // Yes, QoS is active on this AC
+     VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO_HIGH,
+               "%s: %d: On session %d AC %d has QoS active",
+               __func__, __LINE__, sessionId, ac);
+
+     // Are any TSPECs active?
+     if( pACInfo->tspec_mask_status )
+     {
+         // Yes, at least 1 TSPEC is active.  Are they both active?
+         if( SME_QOS_TSPEC_MASK_BIT_1_2_SET == pACInfo->tspec_mask_status )
+         {
+             //both TSPECS are active
+             *pActiveTspec = 2;
+         }
+         else
+         {
+             // only one TSPEC is active
+             *pActiveTspec = 1;
+         }
+     }
+     else
+     {
+        *pActiveTspec = 0;
+     }
+  }
+  else
+  {
+    // Hardcoding value to INVALID_TSPEC (invalid non-zero in this context,
+    // valid values are 0,1,2) to indicate the caller not to update UAPSD
+    // parameters as QOS is not active
+
+     *pActiveTspec = INVALID_TSPEC;
+     VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO_HIGH,
+               "%s: %d: On session %d AC %d has no QoS active",
+               __func__, __LINE__, sessionId, ac);
+  }
+
   return VOS_TRUE;
 }
 

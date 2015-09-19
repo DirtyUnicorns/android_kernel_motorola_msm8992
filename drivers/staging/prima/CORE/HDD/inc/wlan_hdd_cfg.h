@@ -220,6 +220,16 @@
 #define CFG_IMPS_MAXIMUM_SLEEP_TIME_MAX        ( 65535 )
 #define CFG_IMPS_MAXIMUM_SLEEP_TIME_DEFAULT    ( 15 )
 
+/*If there is scan on STA interface back to back with
+ *time diff nDeferScanTimeInterval, driver will not
+ *issue a new scan. Driver will return cached result to kernel.
+ *the interval is in msec
+ */
+#define CFG_DEFER_SCAN_TIME_INTERVAL            "gDeferScanTimeInterval"
+#define CFG_DEFER_SCAN_TIME_INTERVAL_MIN        ( 0 )
+#define CFG_DEFER_SCAN_TIME_INTERVAL_MAX        ( 65535 )
+#define CFG_DEFER_SCAN_TIME_INTERVAL_DEFAULT    ( 2000  )
+
 //BMPS = BeaconModePowerSave
 #define CFG_ENABLE_BMPS_NAME                   "gEnableBmps"
 #define CFG_ENABLE_BMPS_MIN                    ( 0 )
@@ -1394,6 +1404,11 @@ typedef enum
 #define CFG_ENABLE_DFS_CHNL_SCAN_MAX               ( 1 )
 #define CFG_ENABLE_DFS_CHNL_SCAN_DEFAULT           ( 1 )
 
+#define CFG_ENABLE_DFS_PNO_CHNL_SCAN_NAME              "gEnableDFSPnoChnlScan"
+#define CFG_ENABLE_DFS_PNO_CHNL_SCAN_MIN               ( 0 )
+#define CFG_ENABLE_DFS_PNO_CHNL_SCAN_MAX               ( 1 )
+#define CFG_ENABLE_DFS_PNO_CHNL_SCAN_DEFAULT           ( 1 )
+
 typedef enum
 {
     eHDD_LINK_SPEED_REPORT_ACTUAL = 0,
@@ -1871,6 +1886,18 @@ static __inline tANI_U32 defHddRateToDefCfgRate( tANI_U32 defRateIndex )
 #define CFG_TDLS_SCAN_COEX_SUPPORT_ENABLE_MIN        (0)
 #define CFG_TDLS_SCAN_COEX_SUPPORT_ENABLE_MAX        (1)
 #define CFG_TDLS_SCAN_COEX_SUPPORT_ENABLE_DEFAULT    (0)
+
+
+/* if gEnableTDLSScan
+ * 0: Same as gEnableTDLSScanCoexistence ; driver will do disconnect if
+ * Peer is not buffer STA capable.
+ * 1: Dut will scan in all cases.
+ * 2: If peer is not buffer STA capable, use CTS2self to do scan.
+*/
+#define CFG_TDLS_SCAN_ENABLE            "gEnableTDLSScan"
+#define CFG_TDLS_SCAN_ENABLE_MIN        (0)
+#define CFG_TDLS_SCAN_ENABLE_MAX        (2)
+#define CFG_TDLS_SCAN_ENABLE_DEFAULT    (0)
 #endif
 
 #ifdef WLAN_FEATURE_LINK_LAYER_STATS
@@ -2086,9 +2113,10 @@ static __inline tANI_U32 defHddRateToDefCfgRate( tANI_U32 defRateIndex )
 #define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MAX          ( 0xffffffff )
 #endif
 
+/* Not supporting this feature in pronto */
 #define CFG_AMSDU_SUPPORT_IN_AMPDU_NAME                "gAmsduSupportInAMPDU"
 #define CFG_AMSDU_SUPPORT_IN_AMPDU_MIN                 (0)
-#define CFG_AMSDU_SUPPORT_IN_AMPDU_MAX                 (1)
+#define CFG_AMSDU_SUPPORT_IN_AMPDU_MAX                 (0)
 #define CFG_AMSDU_SUPPORT_IN_AMPDU_DEFAULT             (0) //disabled
 
 /* Prefer connecting to 5G AP even if its RSSI is lower by
@@ -2151,6 +2179,10 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 #define CFG_CTS2S_DURING_BTC_SCO_MIN            WNI_CFG_BTC_CTS2S_DURING_SCO_STAMIN
 #define CFG_CTS2S_DURING_BTC_SCO_MAX            WNI_CFG_BTC_CTS2S_DURING_SCO_STAMAX
 
+#define CFG_BTC_FAST_WLAN_CONN_PREF             "gBtcFastWlanConnPref"
+#define CFG_BTC_FAST_WLAN_CONN_PREF_DEFAULT     ( 1 )
+#define CFG_BTC_FAST_WLAN_CONN_PREF_MIN         ( 0 )
+#define CFG_BTC_FAST_WLAN_CONN_PREF_MAX         ( 1 )
 
 /*
  * Connection related log Enable/Disable.
@@ -2368,6 +2400,15 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 #define CFG_BURST_MODE_BE_TXOP_VALUE_MAX       ( 12288 )
 #define CFG_BURST_MODE_BE_TXOP_VALUE_DEFAULT   ( 0 )
 
+#define CFG_BTC_ENABLE_IND_TIMER_VALUE          "gBtcEnableIndTimerVal"
+#define CFG_BTC_ENABLE_IND_TIMER_VALUE_MIN     ( 5 )
+#define CFG_BTC_ENABLE_IND_TIMER_VALUE_MAX     ( 60 )
+#define CFG_BTC_ENABLE_IND_TIMER_VALUE_DEFAULT ( 60 )
+
+#define CFG_P2P_LISTEN_DEFER_INTERVAL_NAME     "gP2PListenDeferInterval"
+#define CFG_P2P_LISTEN_DEFER_INTERVAL_MIN      ( 100 )
+#define CFG_P2P_LISTEN_DEFER_INTERVAL_MAX      ( 200 )
+#define CFG_P2P_LISTEN_DEFER_INTERVAL_DEFAULT  ( 100 )
 /*--------------------------------------------------------------------------- 
   Type declarations
   -------------------------------------------------------------------------*/ 
@@ -2387,6 +2428,7 @@ typedef struct
    v_BOOL_t      ShortSlotTimeEnabled;
    v_BOOL_t      Is11dSupportEnabled;
    v_BOOL_t      Is11hSupportEnabled;
+   v_U32_t       nDeferScanTimeInterval;
    v_BOOL_t      fEnforce11dChannels;
    v_BOOL_t      fSupplicantCountryCodeHasPriority;
    v_BOOL_t      fEnforceCountryCodeMatch;
@@ -2683,6 +2725,7 @@ typedef struct
    v_U32_t                     enableCloseLoop;
    v_U8_t                      enableBypass11d;
    v_U8_t                      enableDFSChnlScan;
+   v_U8_t                      enableDFSPnoChnlScan;
    v_U8_t                      enableDynamicDTIM;
    v_U8_t                      enableAutomaticTxPowerControl;
    v_U8_t                      ShortGI40MhzEnable;
@@ -2737,6 +2780,7 @@ typedef struct
    v_U32_t                     fEnableTDLSOffChannel;
    v_U32_t                     fEnableTDLSWmmMode;
    v_BOOL_t                    fEnableTDLSScanCoexSupport;
+   v_BOOL_t                    fEnableTDLSScan;
 #endif
 #ifdef WLAN_FEATURE_LINK_LAYER_STATS
    v_BOOL_t                    fEnableLLStats;
@@ -2802,7 +2846,7 @@ typedef struct
 #endif
    char                        overrideCountryCode[4];
    v_U32_t                     gAsdProbeInterval;
-   v_U32_t                     gAsdTriggerThreshold;
+   v_S7_t                      gAsdTriggerThreshold;
    v_U32_t                     gAsdRTTRssiHystThreshold;
    v_BOOL_t                    debugP2pRemainOnChannel;
    v_U32_t                     cfgBtcCTS2SduringSCO;
@@ -2854,6 +2898,9 @@ typedef struct
    v_U8_t                      acsScanBandPreference;
    v_U16_t                     acsBandSwitchThreshold;
    v_U32_t                     enableDynamicRAStartRate;
+   v_U8_t                      btcEnableIndTimerVal;
+   v_BOOL_t                    btcFastWlanConnPref;
+   v_U16_t                     gP2PListenDeferInterval;
 } hdd_config_t;
 /*--------------------------------------------------------------------------- 
   Function declarations and documenation

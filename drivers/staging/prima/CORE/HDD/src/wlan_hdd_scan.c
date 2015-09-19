@@ -70,7 +70,7 @@
 
 #include <linux/wireless.h>
 #include <net/cfg80211.h>
-
+#include <vos_sched.h>
 
 #define WEXT_CSCAN_HEADER               "CSCAN S\x01\x00\x00S\x00"
 #define WEXT_CSCAN_HEADER_SIZE          12
@@ -237,7 +237,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
    {
       /* no space to add event */
       /* Error code may be E2BIG */
-       hddLog( LOGW, "hdd_IndicateScanResult: no space for SIOCGIWAP ");
+       hddLog(LOGE, "hdd_IndicateScanResult: no space for SIOCGIWAP ");
        return -E2BIG;
    }
 
@@ -273,7 +273,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
 
    if (last_event == current_event)
    { /* no space to add event */
-       hddLog( LOGW, "hdd_IndicateScanResult: no space for SIOCGIWNAME");
+       hddLog( LOGE, "hdd_IndicateScanResult: no space for SIOCGIWNAME");
       /* Error code, may be E2BIG */
        return -E2BIG;
    }
@@ -292,7 +292,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
 
    if (last_event == current_event)
    { /* no space to add event */
-       hddLog( LOGW, "hdd_IndicateScanResult: no space for SIOCGIWFREQ");
+       hddLog( LOGE, "hdd_IndicateScanResult: no space for SIOCGIWFREQ");
        return -E2BIG;
    }
 
@@ -323,7 +323,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
 
    if (last_event == current_event)
    { /* no space to add event */
-       hddLog( LOGW, "hdd_IndicateScanResult: no space for SIOCGIWMODE");
+       hddLog(LOGE, "hdd_IndicateScanResult: no space for SIOCGIWMODE");
        return -E2BIG;
    }
    /* To extract SSID */
@@ -363,14 +363,14 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
 
           if(last_event == current_event)
           { /* no space to add event */
-             hddLog( LOGW, "hdd_IndicateScanResult: no space for SIOCGIWESSID");
+             hddLog( LOGE, "hdd_IndicateScanResult: no space for SIOCGIWESSID");
              return -E2BIG;
           }
        }
 
       if( hdd_GetWPARSNIEs( ( tANI_U8 *) descriptor->ieFields, ie_length, &last_event, &current_event, scanInfo )  < 0    )
       {
-          hddLog( LOGW, "hdd_IndicateScanResult: no space for SIOCGIWESSID");
+          hddLog( LOGE, "hdd_IndicateScanResult: no space for SIOCGIWESSID");
           return -E2BIG;
       }
 
@@ -446,7 +446,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
       {
           if (last_event == current_event)
           { /* no space to add event */
-              hddLog( LOGW, "hdd_IndicateScanResult: no space for SIOCGIWRATE");
+              hddLog( LOGE, "hdd_IndicateScanResult: no space for SIOCGIWRATE");
               return -E2BIG;
           }
       }
@@ -473,7 +473,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
       if(last_event == current_event)
       { /* no space to add event
                Error code, may be E2BIG */
-          hddLog( LOGW, "hdd_IndicateScanResult: no space for SIOCGIWENCODE");
+          hddLog( LOGE, "hdd_IndicateScanResult: no space for SIOCGIWENCODE");
           return -E2BIG;
       }
    }
@@ -508,7 +508,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
 
    if(last_event == current_event)
    { /* no space to add event */
-       hddLog( LOGW, "hdd_IndicateScanResult: no space for IWEVQUAL");
+       hddLog( LOGE, "hdd_IndicateScanResult: no space for IWEVQUAL");
        return -E2BIG;
    }
 
@@ -523,71 +523,13 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
                                          &event, custom);
    if(last_event == current_event)
    { /* no space to add event */
-      hddLog( LOGW, "hdd_IndicateScanResult: no space for IWEVCUSTOM (age)");
+      hddLog( LOGE, "hdd_IndicateScanResult: no space for IWEVCUSTOM (age)");
       return -E2BIG;
    }
 
    scanInfo->start = current_event;
 
    return 0;
-}
-
-/**---------------------------------------------------------------------------
-
-  \brief hdd_processSpoofMacAddrRequest() -
-
-   The function is called from scan completion callback and from
-   cfg80211 vendor command
-
-  \param  - pHddCtx - Pointer to the HDD Context.
-
-  \return - 0 for success, non zero for failure
-
-  --------------------------------------------------------------------------*/
-
-VOS_STATUS hdd_processSpoofMacAddrRequest(hdd_context_t *pHddCtx)
-{
-
-    ENTER();
-
-    mutex_lock(&pHddCtx->spoofMacAddr.macSpoofingLock);
-
-    if (pHddCtx->spoofMacAddr.isEnabled) {
-        if (VOS_STATUS_SUCCESS != vos_randomize_n_bytes(
-                (void *)(&pHddCtx->spoofMacAddr.randomMacAddr.bytes[3]),
-                VOS_MAC_ADDR_LAST_3_BYTES)) {
-                hddLog(LOGE, FL("Failed to generate random Mac Addr"));
-                pHddCtx->spoofMacAddr.isEnabled = FALSE;
-                mutex_unlock(&pHddCtx->spoofMacAddr.macSpoofingLock);
-                return VOS_STATUS_E_FAILURE;
-        }
-    }
-
-    hddLog(LOG1, FL("New Mac Addr Generated "MAC_ADDRESS_STR),
-                 MAC_ADDR_ARRAY(pHddCtx->spoofMacAddr.randomMacAddr.bytes));
-
-    if (pHddCtx->scan_info.mScanPending != TRUE)
-    {
-        pHddCtx->spoofMacAddr.isReqDeferred = FALSE;
-        hddLog(LOG1, FL("Processing Spoof request now"));
-        /* Inform SME about spoof mac addr request*/
-        if ( eHAL_STATUS_SUCCESS != sme_SpoofMacAddrReq(pHddCtx->hHal,
-                &pHddCtx->spoofMacAddr.randomMacAddr))
-        {
-            hddLog(LOGE, FL("Sending Spoof request failed - Disable spoofing"));
-            pHddCtx->spoofMacAddr.isEnabled = FALSE;
-        }
-    } else
-    {
-        hddLog(LOG1, FL("Scan in Progress. Spoofing Deferred"));
-        pHddCtx->spoofMacAddr.isReqDeferred = TRUE;
-    }
-
-    mutex_unlock(&pHddCtx->spoofMacAddr.macSpoofingLock);
-
-    EXIT();
-
-    return VOS_STATUS_SUCCESS;
 }
 
 /**---------------------------------------------------------------------------
@@ -658,7 +600,7 @@ static eHalStatus hdd_ScanRequestCallback(tHalHandle halHandle, void *pContext,
 
 /**---------------------------------------------------------------------------
 
-  \brief iw_set_scan() -
+  \brief __iw_set_scan() -
 
    This function process the scan request from the wpa_supplicant
    and set the scan request to the SME
@@ -672,21 +614,45 @@ static eHalStatus hdd_ScanRequestCallback(tHalHandle halHandle, void *pContext,
   --------------------------------------------------------------------------*/
 
 
-int iw_set_scan(struct net_device *dev, struct iw_request_info *info,
+int __iw_set_scan(struct net_device *dev, struct iw_request_info *info,
                  union iwreq_data *wrqu, char *extra)
 {
-   hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev) ;
-   hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-   hdd_wext_state_t *pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+   hdd_adapter_t *pAdapter;
+   hdd_context_t *pHddCtx;
+   hdd_wext_state_t *pwextBuf;
    tCsrScanRequest scanRequest;
    v_U32_t scanId = 0;
    eHalStatus status = eHAL_STATUS_SUCCESS;
    struct iw_scan_req *scanReq = (struct iw_scan_req *)extra;
+   int ret = 0;
 
    ENTER();
 
    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, "%s: enter !!!",__func__);
 
+   pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
+   if (NULL == pAdapter)
+   {
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                 "%s: Adapter is NULL",__func__);
+       return -EINVAL;
+   }
+
+   pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
+   ret = wlan_hdd_validate_context(pHddCtx);
+   if (0 != ret)
+   {
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                 "%s: HDD context is not valid",__func__);
+       return ret;
+   }
+   pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+   if (NULL == pwextBuf)
+   {
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                 "%s: pwextBuf is NULL",__func__);
+       return -EINVAL;
+   }
 #ifdef WLAN_BTAMP_FEATURE
    //Scan not supported when AMP traffic is on.
    if( VOS_TRUE == WLANBAP_AmpSessionOn() ) 
@@ -701,10 +667,6 @@ int iw_set_scan(struct net_device *dev, struct iw_request_info *info,
        return eHAL_STATUS_SUCCESS;
    }
 
-   if ((WLAN_HDD_GET_CTX(pAdapter))->isLogpInProgress) {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_FATAL, "%s:LOGP in Progress. Ignore!!!",__func__);
-      return eHAL_STATUS_SUCCESS;
-   }
    vos_mem_zero( &scanRequest, sizeof(scanRequest));
 
    if (NULL != wrqu->data.pointer)
@@ -828,9 +790,21 @@ error:
    return status;
 }
 
+int iw_set_scan(struct net_device *dev, struct iw_request_info *info,
+                union iwreq_data *wrqu, char *extra)
+{
+   int ret;
+
+   vos_ssr_protect(__func__);
+   ret = __iw_set_scan(dev, info, wrqu, extra);
+   vos_ssr_unprotect(__func__);
+
+   return ret;
+}
+
 /**---------------------------------------------------------------------------
 
-  \brief iw_get_scan() -
+  \brief __iw_get_scan() -
 
    This function returns the scan results to the wpa_supplicant
 
@@ -843,34 +817,52 @@ error:
   --------------------------------------------------------------------------*/
 
 
-int iw_get_scan(struct net_device *dev,
-                         struct iw_request_info *info,
-                         union iwreq_data *wrqu, char *extra)
+int __iw_get_scan(struct net_device *dev,
+                struct iw_request_info *info,
+                union iwreq_data *wrqu, char *extra)
 {
-   hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev) ;
-   hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-   tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
+   hdd_adapter_t *pAdapter;
+   hdd_context_t *pHddCtx;
+   tHalHandle hHal;
    tCsrScanResultInfo *pScanResult;
    eHalStatus status = eHAL_STATUS_SUCCESS;
    hdd_scan_info_t scanInfo;
    tScanResultHandle pResult;
-   int i = 0;
+   int i = 0, ret = 0;
 
    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, "%s: enter buffer length %d!!!",
        __func__, (wrqu->data.length)?wrqu->data.length:IW_SCAN_MAX_DATA);
    ENTER();
+
+   pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
+   if (NULL == pAdapter)
+   {
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                 "%s: Adapter is NULL",__func__);
+       return -EINVAL;
+   }
+
+   pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
+   ret = wlan_hdd_validate_context(pHddCtx);
+   if (0 != ret)
+   {
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                 "%s: HDD context is not valid",__func__);
+       return ret;
+   }
+   hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
+   if (NULL == hHal)
+   {
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                 "%s: Hal Context is NULL",__func__);
+       return -EINVAL;
+   }
 
    if (TRUE == pHddCtx->scan_info.mScanPending)
    {
        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_FATAL, "%s:mScanPending is TRUE !!!",__func__);
        return -EAGAIN;
    }
-
-   if ((WLAN_HDD_GET_CTX(pAdapter))->isLogpInProgress) {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_FATAL, "%s:LOGP in Progress. Ignore!!!",__func__);
-      return -EAGAIN;
-   }
-
    scanInfo.dev = dev;
    scanInfo.start = extra;
    scanInfo.info = info;
@@ -889,7 +881,7 @@ int iw_get_scan(struct net_device *dev,
    if (NULL == pResult)
    {
        // no scan results
-       hddLog(LOG1,"iw_get_scan: NULL Scan Result ");
+       hddLog(LOG1,"__iw_get_scan: NULL Scan Result ");
        return 0;
    }
 
@@ -911,6 +903,19 @@ int iw_get_scan(struct net_device *dev,
    EXIT();
    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, "%s: exit total %d BSS reported !!!",__func__, i);
    return status;
+}
+
+int iw_get_scan(struct net_device *dev,
+                struct iw_request_info *info,
+                union iwreq_data *wrqu, char *extra)
+{
+    int ret;
+
+    vos_ssr_protect(__func__);
+    ret = __iw_get_scan(dev, info, wrqu, extra);
+    vos_ssr_unprotect(__func__);
+
+    return ret;
 }
 
 #if 0
@@ -1235,9 +1240,10 @@ exit_point:
 }
 
 /* Abort any MAC scan if in progress */
-void hdd_abort_mac_scan(hdd_context_t* pHddCtx, tANI_U8 sessionId,
-                        eCsrAbortReason reason)
+tSirAbortScanStatus hdd_abort_mac_scan(hdd_context_t* pHddCtx,
+                                       tANI_U8 sessionId,
+                                       eCsrAbortReason reason)
 {
-    sme_AbortMacScan(pHddCtx->hHal, sessionId, reason);
+    return sme_AbortMacScan(pHddCtx->hHal, sessionId, reason);
 }
 

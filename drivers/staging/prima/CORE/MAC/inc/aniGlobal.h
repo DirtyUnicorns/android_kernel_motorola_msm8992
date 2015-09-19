@@ -374,8 +374,6 @@ typedef struct sAniSirLim
 
     //////////////////////////////////////     SCAN/LEARN RELATED START ///////////////////////////////////////////
     tSirMacAddr         gSelfMacAddr;   //added for BT-AMP Support 
-    tSirMacAddr         spoofMacAddr;   //added for Mac Addr Spoofing support
-    tANI_U8             isSpoofingEnabled;
 
     //////////////////////////////////////////     BSS RELATED END ///////////////////////////////////////////
     // Place holder for StartBssReq message
@@ -1076,6 +1074,7 @@ typedef struct sAniSirGlobal
 
     v_BOOL_t isCoexScoIndSet;
     v_U8_t miracast_mode;
+    v_U8_t fBtcEnableIndTimerVal;
 } tAniSirGlobal;
 
 #ifdef FEATURE_WLAN_TDLS

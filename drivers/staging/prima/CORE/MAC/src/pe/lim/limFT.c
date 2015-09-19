@@ -318,15 +318,15 @@ int limProcessFTPreAuthReq(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
     if (psessionEntry->currentOperChannel != pMac->ft.ftPEContext.pFTPreAuthReq->preAuthchannelNum) 
     {
         // Need to suspend link only if the channels are different
-        PELOG2(limLog(pMac,LOG2,"%s: Performing pre-auth on different"
-               " channel (session %p)", __func__, psessionEntry);)
+        limLog(pMac, LOG1, FL(" Performing pre-auth on different"
+               " channel (session %p)"), psessionEntry);
         limSuspendLink(pMac, eSIR_CHECK_ROAMING_SCAN, FTPreAuthSuspendLinkHandler, 
                        (tANI_U32 *)psessionEntry); 
     }
     else 
     {
-        PELOG2(limLog(pMac,LOG2,"%s: Performing pre-auth on same"
-               " channel (session %p)", __func__, psessionEntry);)
+        limLog(pMac, LOG1, FL(" Performing pre-auth on same"
+               " channel (session %p)"), psessionEntry);
         // We are in the same channel. Perform pre-auth
         limPerformFTPreAuth(pMac, eHAL_STATUS_SUCCESS, NULL, psessionEntry);
     }
@@ -364,9 +364,9 @@ void limPerformFTPreAuth(tpAniSirGlobal pMac, eHalStatus status, tANI_U32 *data,
     pMac->ft.ftPEContext.psavedsessionEntry = psessionEntry;
 
 #if defined WLAN_FEATURE_VOWIFI_11R_DEBUG
-    PELOG2(limLog(pMac,LOG2,"Entered wait auth2 state for FT"
-           " (old session %p)",
-           pMac->ft.ftPEContext.psavedsessionEntry);)
+    limLog(pMac, LOG1, FL("Entered wait auth2 state for FT"
+           " (old session %p)"),
+           pMac->ft.ftPEContext.psavedsessionEntry);
 #endif
 
 
@@ -1151,7 +1151,9 @@ void limHandleFTPreAuthRsp(tpAniSirGlobal pMac, tSirRetStatus status,
                                               &sessionId, pMac->lim.maxStation)) == NULL)
         {
             limLog(pMac, LOGE, FL("Session Can not be created for pre-auth 11R AP"));
-            return;
+            status = eSIR_FAILURE;
+            pMac->ft.ftPEContext.ftPreAuthStatus = status;
+            goto out;
         }
         pftSessionEntry->peSessionId = sessionId;
         sirCopyMacAddr(pftSessionEntry->selfMacAddr, psessionEntry->selfMacAddr);
@@ -1180,7 +1182,7 @@ void limHandleFTPreAuthRsp(tpAniSirGlobal pMac, tSirRetStatus status,
         sirCopyMacAddr(psessionEntry->limReAssocbssId, pbssDescription->bssId);
         limPrintMacAddr(pMac, psessionEntry->limReAssocbssId, LOG1);
     }
-
+out:
     if (psessionEntry->currentOperChannel != 
         pMac->ft.ftPEContext.pFTPreAuthReq->preAuthchannelNum) 
     {

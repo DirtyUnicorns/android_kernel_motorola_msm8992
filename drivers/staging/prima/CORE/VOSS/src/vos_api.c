@@ -2189,18 +2189,19 @@ VOS_STATUS vos_wlanRestart(void)
   This function is called to issue dump commands to Firmware
 
   @param
-       cmd - Command No. to execute
-       arg1 - argument 1 to cmd
-       arg2 - argument 2 to cmd
-       arg3 - argument 3 to cmd
-       arg4 - argument 4 to cmd
+       cmd     -  Command No. to execute
+       arg1    -  argument 1 to cmd
+       arg2    -  argument 2 to cmd
+       arg3    -  argument 3 to cmd
+       arg4    -  argument 4 to cmd
+       async   -  asynchronous event. Don't wait for completion.
   @return
        NONE
 */
 v_VOID_t vos_fwDumpReq(tANI_U32 cmd, tANI_U32 arg1, tANI_U32 arg2,
-                        tANI_U32 arg3, tANI_U32 arg4)
+                        tANI_U32 arg3, tANI_U32 arg4, tANI_U8 async)
 {
-   WDA_HALDumpCmdReq(NULL, cmd, arg1, arg2, arg3, arg4, NULL);
+   WDA_HALDumpCmdReq(NULL, cmd, arg1, arg2, arg3, arg4, NULL, async);
 }
 
 v_U64_t vos_get_monotonic_boottime(void)
@@ -2231,4 +2232,28 @@ VOS_STATUS  vos_randomize_n_bytes(void *start_addr, tANI_U32 n)
     get_random_bytes( start_addr, n);
 
     return eHAL_STATUS_SUCCESS;
+}
+
+/**---------------------------------------------------------------------------
+
+  \brief vos_is_wlan_in_badState() - get isFatalError flag from WD Ctx
+
+  \param  - VOS_MODULE_ID   - module id
+          - moduleContext   - module context
+
+  \return -  isFatalError value if WDCtx is valid otherwise true
+
+  --------------------------------------------------------------------------*/
+v_BOOL_t vos_is_wlan_in_badState(VOS_MODULE_ID moduleId,
+                                 v_VOID_t *moduleContext)
+{
+    struct _VosWatchdogContext *pVosWDCtx = get_vos_watchdog_ctxt();
+
+    if (pVosWDCtx == NULL){
+        VOS_TRACE(moduleId, VOS_TRACE_LEVEL_ERROR,
+                "%s: global wd context is null", __func__);
+
+        return TRUE;
+    }
+    return pVosWDCtx->isFatalError;
 }

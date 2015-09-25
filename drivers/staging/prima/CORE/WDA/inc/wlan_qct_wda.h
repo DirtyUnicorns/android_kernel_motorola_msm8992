@@ -134,8 +134,6 @@ typedef enum
 
 #define IS_FW_IN_TX_PATH_FEATURE_ENABLE ((WDI_getHostWlanFeatCaps(FW_IN_TX_PATH)) & (WDA_getFwWlanFeatCaps(FW_IN_TX_PATH)))
 #define IS_MUMIMO_BFORMEE_CAPABLE ((WDI_getHostWlanFeatCaps(MU_MIMO)) & (WDA_getFwWlanFeatCaps(MU_MIMO)))
-#define IS_FEATURE_BCN_FLT_DELTA_ENABLE ((WDI_getHostWlanFeatCaps(BCN_IE_FLT_DELTA)) & (WDA_getFwWlanFeatCaps(BCN_IE_FLT_DELTA)))
-#define IS_FEATURE_FW_STATS_ENABLE ((WDI_getHostWlanFeatCaps(FW_STATS)) & (WDA_getFwWlanFeatCaps(FW_STATS)))
 /*--------------------------------------------------------------------------
   Utilities
  --------------------------------------------------------------------------*/
@@ -218,10 +216,6 @@ typedef enum {
 #define WDA_SET_CHANNEL_REG_POWER(pwda_channel,val) do { \
      (pwda_channel)->reg_info_1 &= 0xff00ffff;           \
      (pwda_channel)->reg_info_1 |= ((val&0xff) << 16);   \
-     } while(0)
-#define WDA_SET_CUURENT_REG_DOMAIN(pwda_channel, val) do { \
-     (pwda_channel)->reg_info_2 |= ((val&0x7) << 24);   \
-     (pwda_channel)->reg_info_2 |= 0x80000000;   \
      } while(0)
 #define WDA_SET_CHANNEL_MIN_POWER(pwlan_hal_update_channel,val) do { \
      (pwlan_hal_update_channel)->reg_info_1 &= 0xffffff00;           \
@@ -493,10 +487,10 @@ typedef struct
    tSirLinkState        linkState;
    /* set, when BT AMP session is going on */
    v_BOOL_t             wdaAmpSessionOn;
+   v_U32_t              VosPacketToFree;
    v_BOOL_t             needShutdown;
    v_BOOL_t             wdiFailed;
    v_BOOL_t             wdaTimersCreated;
-   uintptr_t            VosPacketToFree;
 
    /* Event to wait for WDA stop on FTM mode */
    vos_event_t          ftmStopDoneEvent;
@@ -511,15 +505,6 @@ typedef struct
    v_PVOID_t            wdaMsgParam;            /* PE parameter tracking */
    v_PVOID_t            wdaWdiApiMsgParam;      /* WDI API paramter tracking */
 } tWDA_ReqParams; 
-
-typedef struct
-{
-   v_PVOID_t            pWdaContext;             /* pointer to WDA context*/
-   v_PVOID_t            wdaMsgParam;            /* PE parameter tracking */
-   v_PVOID_t            wdaWdiApiMsgParam;      /* WDI API paramter tracking */
-   v_BOOL_t             wdaHALDumpAsync;        /* Async Request */
-
-} tWDA_HalDumpReqParams;
 
 /*
  * FUNCTION: WDA_open
@@ -1223,8 +1208,6 @@ tSirRetStatus uMacPostCtrlMsg(void* pSirGlobal, tSirMbMsg* pMb);
 #define WDA_HT40_OBSS_STOP_SCAN_IND SIR_HAL_HT40_OBSS_STOP_SCAN_IND
 
 #define WDA_GET_BCN_MISS_RATE_REQ        SIR_HAL_BCN_MISS_RATE_REQ
-#define WDA_ENCRYPT_MSG_REQ               SIR_HAL_ENCRYPT_MSG_REQ
-#define WDA_ENCRYPT_MSG_RSP               SIR_HAL_ENCRYPT_MSG_RSP
 
 #ifdef WLAN_FEATURE_LINK_LAYER_STATS
 #define WDA_LINK_LAYER_STATS_CLEAR_REQ         SIR_HAL_LL_STATS_CLEAR_REQ
@@ -1238,8 +1221,6 @@ tSirRetStatus uMacPostCtrlMsg(void* pSirGlobal, tSirMbMsg* pMb);
 #define WDA_SET_TDLS_CHAN_SWITCH_REQ           SIR_HAL_TDLS_CHAN_SWITCH_REQ
 #define WDA_SET_TDLS_CHAN_SWITCH_REQ_RSP       SIR_HAL_TDLS_CHAN_SWITCH_REQ_RSP
 #endif
-
-#define WDA_FW_STATS_GET_REQ                   SIR_HAL_FW_STATS_GET_REQ
 tSirRetStatus wdaPostCtrlMsg(tpAniSirGlobal pMac, tSirMsgQ *pMsg);
 
 eHalStatus WDA_SetRegDomain(void * clientCtxt, v_REGDOMAIN_t regId,
@@ -1271,6 +1252,7 @@ eHalStatus WDA_SetRegDomain(void * clientCtxt, v_REGDOMAIN_t regId,
 #endif /* WLAN_FEATURE_EXTSCAN */
 
 #define WDA_SPOOF_MAC_ADDR_REQ               SIR_HAL_SPOOF_MAC_ADDR_REQ
+#define WDA_SPOOF_MAC_ADDR_RSP               SIR_HAL_SPOOF_MAC_ADDR_RSP
 
 #define HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME 0x40 // Bit 6 will be used to control BD rate for Management frames
 
@@ -1916,12 +1898,11 @@ WDA_DS_GetTxFlowMask
 
    IN
     pMac             MAC global pointer
-    cmd              Hal dump command
-    arg1             Dump command argument 1
-    arg2             Dump command argument 2
-    arg3             Dump command argument 3
-    arg4             Dump command argument 4
-    async            Asynchronous event. Doesn't wait for rsp.
+    cmd               Hal dump command
+    arg1              Dump command argument 1
+    arg2              Dump command argument 2
+    arg3              Dump command argument 3
+    arg4              Dump command argument 4
 
    OUT
        pBuffer          Dump command Response buffer
@@ -1935,7 +1916,7 @@ WDA_DS_GetTxFlowMask
 ============================================================================*/
 VOS_STATUS WDA_HALDumpCmdReq(tpAniSirGlobal   pMac,tANI_U32 cmd, 
                  tANI_U32   arg1, tANI_U32   arg2, tANI_U32   arg3,
-                 tANI_U32   arg4, tANI_U8   *pBuffer, wpt_boolean async);
+                 tANI_U32   arg4, tANI_U8   *pBuffer);
 
 /*==========================================================================
    FUNCTION    WDA_featureCapsExchange

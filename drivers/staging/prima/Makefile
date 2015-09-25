@@ -1,7 +1,7 @@
 MODNAME := wlan
 WLAN_ROOT := drivers/staging/prima
- 
- # Feature flags which are not (currently) configurable via Kconfig
+
+# Feature flags which are not (currently) configurable via Kconfig
 
 #Whether to build debug version
 BUILD_DEBUG_VERSION := 1

@@ -430,18 +430,28 @@ void limContinuePostChannelScan(tpAniSirGlobal pMac)
         (limActiveScanAllowed(pMac, channelNum)))
     {
         TX_TIMER *periodicScanTimer;
+        PELOG2(limLog(pMac, LOG2, FL("ACTIVE Scan chan %d, sending probe"), channelNum);)
 
         pMac->lim.probeCounter++;
         do
         {
+            tSirMacAddr         gSelfMacAddr;
             /* Prepare and send Probe Request frame for all the SSIDs present in the saved MLM 
                     */
-       
-            limLog(pMac, LOG1, FL("sending ProbeReq number %d, for SSID %s on channel: %d"),
-                                                i, pMac->lim.gpLimMlmScanReq->ssId[i].ssId, channelNum);
+            if ((pMac->lim.isSpoofingEnabled != TRUE) &&
+                (TRUE == vos_is_macaddr_zero((v_MACADDR_t *)&pMac->lim.spoofMacAddr))) {
+                vos_mem_copy(gSelfMacAddr, pMac->lim.gSelfMacAddr, VOS_MAC_ADDRESS_LEN);
+            } else {
+                vos_mem_copy(gSelfMacAddr, pMac->lim.spoofMacAddr, VOS_MAC_ADDRESS_LEN);
+            }
+            limLog( pMac, LOG1, FL("Mac Addr used in Probe Req is :"MAC_ADDRESS_STR),
+                                   MAC_ADDR_ARRAY(gSelfMacAddr));
+
+            PELOGE(limLog(pMac, LOG1, FL("sending ProbeReq number %d, for SSID %s on channel: %d"),
+                                                i, pMac->lim.gpLimMlmScanReq->ssId[i].ssId, channelNum);)
             // include additional IE if there is
             status = limSendProbeReqMgmtFrame( pMac, &pMac->lim.gpLimMlmScanReq->ssId[i],
-               pMac->lim.gpLimMlmScanReq->bssId, channelNum, pMac->lim.gSelfMacAddr, 
+               pMac->lim.gpLimMlmScanReq->bssId, channelNum, gSelfMacAddr,
                pMac->lim.gpLimMlmScanReq->dot11mode,
                pMac->lim.gpLimMlmScanReq->uIEFieldLen,
                (tANI_U8 *)(pMac->lim.gpLimMlmScanReq)+pMac->lim.gpLimMlmScanReq->uIEFieldOffset);
@@ -511,7 +521,6 @@ void limContinuePostChannelScan(tpAniSirGlobal pMac)
         /* Start peridic timer which will trigger probe req based on min/max
            channel timer */
         periodicScanTimer = &pMac->lim.limTimers.gLimPeriodicProbeReqTimer;
-        limDeactivateAndChangeTimer(pMac, eLIM_PERIODIC_PROBE_REQ_TIMER);
         if (tx_timer_activate(periodicScanTimer) != TX_SUCCESS)
         {
              limLog(pMac, LOGP, FL("could not start periodic probe req "
@@ -524,7 +533,7 @@ void limContinuePostChannelScan(tpAniSirGlobal pMac)
     else
     {
         tANI_U32 val;
-        limLog(pMac, LOG1, FL("START PASSIVE Scan chan %d"), channelNum);
+        PELOG2(limLog(pMac, LOG2, FL("START PASSIVE Scan chan %d"), channelNum);)
 
         /// Passive Scanning. Activate maxChannelTimer
         MTRACE(macTrace(pMac, TRACE_CODE_TIMER_DEACTIVATE, NO_SESSION, eLIM_MAX_CHANNEL_TIMER));
@@ -1298,8 +1307,8 @@ limContinueChannelScan(tpAniSirGlobal pMac)
     }
 
     channelNum = limGetCurrentScanChannel(pMac);
-    limLog(pMac, LOG1, FL("Current Channel to be scanned is %d"),
-           channelNum);
+    PELOG2(limLog(pMac, LOG2, FL("Current Channel to be scanned is %d"),
+           channelNum);)
 
     limSendHalStartScanReq(pMac, channelNum, eLIM_HAL_START_SCAN_WAIT_STATE);
     return;
@@ -4000,10 +4009,20 @@ limProcessPeriodicProbeReqTimer(tpAniSirGlobal pMac)
         channelNum = limGetCurrentScanChannel(pMac);
         do
         {
+            tSirMacAddr         gSelfMacAddr;
+
             /* Prepare and send Probe Request frame for all the SSIDs
              * present in the saved MLM
              */
-             
+            if ((pMac->lim.isSpoofingEnabled != TRUE) &&
+               (TRUE == vos_is_macaddr_zero((v_MACADDR_t *)&pMac->lim.spoofMacAddr))) {
+                vos_mem_copy(gSelfMacAddr, pMac->lim.gSelfMacAddr, VOS_MAC_ADDRESS_LEN);
+            } else {
+                vos_mem_copy(gSelfMacAddr, pMac->lim.spoofMacAddr, VOS_MAC_ADDRESS_LEN);
+            }
+            limLog( pMac, LOG1, FL("Mac Addr used in Probe Req is :"MAC_ADDRESS_STR),
+                                   MAC_ADDR_ARRAY(gSelfMacAddr));
+
             /*
              * PELOGE(limLog(pMac, LOGW, FL("sending ProbeReq number %d,"
              *                            " for SSID %s on channel: %d"),
@@ -4011,7 +4030,7 @@ limProcessPeriodicProbeReqTimer(tpAniSirGlobal pMac)
              *                                                channelNum);)
              */
             status = limSendProbeReqMgmtFrame( pMac, &pLimMlmScanReq->ssId[i],
-                     pLimMlmScanReq->bssId, channelNum, pMac->lim.gSelfMacAddr,
+                     pLimMlmScanReq->bssId, channelNum, gSelfMacAddr,
                      pLimMlmScanReq->dot11mode, pLimMlmScanReq->uIEFieldLen,
                (tANI_U8 *)(pLimMlmScanReq) + pLimMlmScanReq->uIEFieldOffset);
 

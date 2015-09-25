@@ -204,6 +204,9 @@ int bdPduInterruptGetThreshold = WLANTL_BD_PDU_INTERRUPT_GET_THRESHOLD;
      ( ( WLANTL_80211_MGMT_ACTION_SUBTYPE == ( (_type_sub) & 0xF )) || \
        ( WLANTL_80211_MGMT_ACTION_NO_ACK_SUBTYPE == ( (_type_sub) & 0xF ))))
 
+#define WLANTL_IS_PROBE_REQ(_type_sub)                                     \
+                     ( WLANTL_MGMT_PROBE_REQ_FRAME_TYPE == ( (_type_sub) & 0x3F ))
+
 #define WLANTL_IS_CTRL_FRAME(_type_sub)                                     \
                      ( WLANTL_CTRL_FRAME_TYPE == ( (_type_sub) & 0x30 ))
 
@@ -1083,7 +1086,7 @@ void WLANTL_AssocFailed(v_U8_t staId)
        " %s fails to start forwarding (staId %d)", __func__, staId);
   }
 }
-
+  
   /*===========================================================================
 
   FUNCTION  WLANTL_Finish_ULA
@@ -1097,18 +1100,18 @@ void WLANTL_AssocFailed(v_U8_t staId)
   DEPENDENCIES
 
      TL must have been initialized before this gets called.
-
+  
   PARAMETERS
 
    callbackRoutine:   HDD Callback function.
    callbackContext : HDD userdata context.
-
+  
    RETURN VALUE
 
    VOS_STATUS_SUCCESS/VOS_STATUS_FAILURE
-
+   
   SIDE EFFECTS
-
+   
 ============================================================================*/
 
 VOS_STATUS WLANTL_Finish_ULA( void (*callbackRoutine) (void *callbackContext),
@@ -1688,75 +1691,6 @@ WLANTL_ChangeSTAState
 
 /*===========================================================================
 
-  FUNCTION    WLANTL_UpdateTdlsSTAClient
-
-  DESCRIPTION
-
-    HDD will call this API when ENABLE_LINK happens and  HDD want to
-    register QoS or other params for TDLS peers.
-
-  DEPENDENCIES
-
-    A station must have been registered before the WMM/QOS registration is
-    called.
-
-  PARAMETERS
-
-   pvosGCtx:        pointer to the global vos context; a handle to TL's
-                    control block can be extracted from its context
-   wSTADescType:    STA Descriptor, contains information related to the
-                    new added STA
-
-  RETURN VALUE
-
-    The result code associated with performing the operation
-
-    VOS_STATUS_E_FAULT: Station ID is outside array boundaries or pointer to
-                        TL cb is NULL ; access would cause a page fault
-    VOS_STATUS_E_EXISTS: Station was not registered
-    VOS_STATUS_SUCCESS:  Everything is good :)
-
-  SIDE EFFECTS
-
-============================================================================*/
-
-VOS_STATUS
-WLANTL_UpdateTdlsSTAClient
-(
- v_PVOID_t                 pvosGCtx,
- WLAN_STADescType*         pwSTADescType
-)
-{
-  WLANTL_CbType* pTLCb = NULL;
-  WLANTL_STAClientType* pClientSTA = NULL;
-  /*------------------------------------------------------------------------
-    Extract TL control block
-   ------------------------------------------------------------------------*/
-  pTLCb = VOS_GET_TL_CB(pvosGCtx);
-  if ( NULL == pTLCb || ( WLAN_MAX_STA_COUNT <= pwSTADescType->ucSTAId))
-  {
-      TLLOGE(VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
-              "WLAN TL:Invalid TL pointer from pvosGCtx on WLANTL_UpdateTdlsSTAClient"));
-      return VOS_STATUS_E_FAULT;
-  }
-
-  pClientSTA = pTLCb->atlSTAClients[pwSTADescType->ucSTAId];
-  if ((NULL == pClientSTA) || 0 == pClientSTA->ucExists)
-  {
-      TLLOGE(VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
-                    "WLAN TL:Station not exists"));
-      return VOS_STATUS_E_FAILURE;
-  }
-
-  pClientSTA->wSTADesc.ucQosEnabled = pwSTADescType->ucQosEnabled;
-
-  return VOS_STATUS_SUCCESS;
-
-}
-
-
-/*===========================================================================
-
   FUNCTION    WLANTL_STAPtkInstalled
 
   DESCRIPTION
@@ -2108,7 +2042,7 @@ WLANTL_STAPktPending
 
   if ( 0 == pClientSTA->ucExists )
   {
-    TLLOGE(VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
+    TLLOGE(VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO,
     "WLAN TL:Station was not previously registered on WLANTL_STAPktPending"));
     return VOS_STATUS_E_EXISTS;
   }
@@ -2148,11 +2082,6 @@ WLANTL_STAPktPending
 
       vos_atomic_set_U8( &pClientSTA->ucPktPending, 1);
 
-      MTRACE(vos_trace(VOS_MODULE_ID_TL, TRACE_CODE_TL_STA_PKT_PENDING, ucSTAId,
-                       (pTLCb->ucTxSuspended << 31) |
-                       ((pTLCb->uResCount >=  WDA_TLI_MIN_RES_DATA) << 30) |
-                       pClientSTA->tlState));
-
       /*------------------------------------------------------------------------
         Check if there are enough resources for transmission and tx is not
         suspended.
@@ -2160,6 +2089,8 @@ WLANTL_STAPktPending
        if (( pTLCb->uResCount >=  WDA_TLI_MIN_RES_DATA ) &&
           ( 0 == pTLCb->ucTxSuspended ))
       {
+        MTRACE(vos_trace(VOS_MODULE_ID_TL, TRACE_CODE_TL_STA_PKT_PENDING,
+                      ucSTAId, pClientSTA->tlState ));
 
         TLLOG2(VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_HIGH,
               "Issuing Xmit start request to BAL"));
@@ -3045,7 +2976,78 @@ WLANTL_FlushStaTID
 /*----------------------------------------------------------------------------
     INTERACTION WITH PE
  ---------------------------------------------------------------------------*/
+/*==========================================================================
 
+  FUNCTION    WLANTL_updateSpoofMacAddr
+
+  DESCRIPTION
+    Called by HDD to update macaddr
+
+  DEPENDENCIES
+    TL must be initialized before this API can be called.
+
+  PARAMETERS
+
+    IN
+    pvosGCtx:           pointer to the global vos context; a handle to
+                        TL's control block can be extracted from its context
+    spoofMacAddr:     spoofed mac adderess
+    selfMacAddr:        self Mac Address
+
+  RETURN VALUE
+    The result code associated with performing the operation
+
+    VOS_STATUS_E_INVAL:  Input parameters are invalid
+    VOS_STATUS_E_FAULT:  pointer to TL cb is NULL ; access would cause a
+                         page fault
+    VOS_STATUS_SUCCESS:  Everything is good :)
+
+  SIDE EFFECTS
+
+============================================================================*/
+VOS_STATUS
+WLANTL_updateSpoofMacAddr
+(
+  v_PVOID_t               pvosGCtx,
+  v_MACADDR_t*            spoofMacAddr,
+  v_MACADDR_t*            selfMacAddr
+)
+{
+  WLANTL_CbType*  pTLCb = NULL;
+  /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
+
+  /*------------------------------------------------------------------------
+    Sanity check
+   ------------------------------------------------------------------------*/
+  if ( NULL == spoofMacAddr || NULL == selfMacAddr)
+  {
+    VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
+           "WLAN TL:Invalid parameter sent on WLANTL_updateSpoofMacAddr");
+    return VOS_STATUS_E_INVAL;
+  }
+
+  /*------------------------------------------------------------------------
+    Extract TL control block
+   ------------------------------------------------------------------------*/
+  pTLCb = VOS_GET_TL_CB(pvosGCtx);
+  if ( NULL == pTLCb )
+  {
+    VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
+          "WLAN TL:Invalid TL pointer from pvosGCtx on WLANTL_ChangeSTAState");
+    return VOS_STATUS_E_FAULT;
+  }
+
+  vos_mem_copy(pTLCb->spoofMacAddr.selfMac.bytes, selfMacAddr,
+                                                         VOS_MAC_ADDRESS_LEN);
+  vos_mem_copy(pTLCb->spoofMacAddr.spoofMac.bytes, spoofMacAddr,
+                                                         VOS_MAC_ADDRESS_LEN);
+
+  VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_LOW,
+                "TL: SelfSTA mac Addr for current Scan "MAC_ADDRESS_STR,
+                        MAC_ADDR_ARRAY(pTLCb->spoofMacAddr.selfMac.bytes));
+
+  return VOS_STATUS_SUCCESS;
+}/* WLANTL_updateSpoofMacAddr */
 /*==========================================================================
 
   FUNCTION    WLANTL_RegisterMgmtFrmClient
@@ -3388,12 +3390,25 @@ WLANTL_TxMgmtFrm
     {
         uQosHdr = VOS_TRUE;
     }
+
+    if (WLANTL_IS_PROBE_REQ(wFrmType))
+    {
+        if (VOS_TRUE == vos_mem_compare((v_VOID_t*) pvAddr2MacAddr,
+            (v_VOID_t*) &pTLCb->spoofMacAddr.spoofMac, VOS_MAC_ADDRESS_LEN))
+        {
+            pvAddr2MacAddr = (v_PVOID_t)pTLCb->spoofMacAddr.selfMac.bytes;
+            VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO,
+                "TL: using self sta addr to get staidx for spoofed probe req "
+                    MAC_ADDRESS_STR, MAC_ADDR_ARRAY(pvAddr2MacAddr->bytes));
+        }
+    }
+
     /*----------------------------------------------------------------------
       Call WDA to build TX header
      ----------------------------------------------------------------------*/
     vosStatus = WDA_DS_BuildTxPacketInfo( pvosGCtx, vosFrmBuf , &vDestMacAddr, 
                    1 /* always 802.11 frames*/, &usPktLen, uQosHdr /*qos not enabled !!!*/, 
-                   0 /* WDS off */, 0, wFrmType, pvAddr2MacAddr, ucTid, 
+                   0 /* WDS off */, 0, wFrmType, pvAddr2MacAddr, ucTid,
                    ucAckResponse, usTimeStamp, 0, 0 );
 
 
@@ -4326,7 +4341,6 @@ WLANTL_GetFrames
           {
             pTLCb->atlSTAClients[ucSTAId]->ucCurrentAC = j-1;
             pTLCb->uCurServedAC = j-1;
-            break;
           }
         }
 
@@ -6893,12 +6907,13 @@ WLANTL_TxThreadDebugHandler
    WLANTL_CbType* pTLCb = NULL;
    WLANTL_STAClientType* pClientSTA = NULL;
    int i = 0;
-   v_U8_t uFlowMask; // TX FlowMask from WDA
+   tWDA_CbContext *pWDA = NULL;
 
    TLLOGE(VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_FATAL,
         "WLAN TL: %s Enter ", __func__));
 
    pTLCb = VOS_GET_TL_CB(pVosContext);
+   pWDA = (tWDA_CbContext *)vos_get_global_context(VOS_MODULE_ID_WDA, pVosContext);
 
    if ( NULL == pVosContext || NULL == pTLCb )
    {
@@ -6907,12 +6922,11 @@ WLANTL_TxThreadDebugHandler
         return;
    }
 
-   if (VOS_STATUS_SUCCESS == WDA_DS_GetTxFlowMask(pVosContext, &uFlowMask))
+   if (NULL != pWDA)
    {
         TLLOGE(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
-              "WDA uTxFlowMask: 0x%x", uFlowMask));
+              "WDA uTxFlowMask: %d", pWDA->uTxFlowMask));
    }
-
    TLLOGE(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
           "************************TL DUMP INFORMATION**************"));
 
@@ -7585,7 +7599,7 @@ WLANTL_STATxAuth
    WLANTL_STAClientType *pStaClient = NULL;
    v_U8_t                ucWDSEnabled = 0;
    v_U32_t               ucTxFlag   = 0;
-   v_U8_t                ucACMask, i;
+   v_U8_t                ucACMask, i; 
   /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
 
   /*------------------------------------------------------------------------
@@ -9255,7 +9269,7 @@ WLANTL_TxProcessMsg
     break;
 
   case WLANTL_TX_FW_DEBUG:
-    vos_fwDumpReq(274, 0, 0, 0, 0, 1); //Async event
+    vos_fwDumpReq(274, 0, 0, 0, 0);
     break;
 
   default:
@@ -9841,8 +9855,6 @@ if ((0 == w8023Header.usLenType) && (pClientSTA->wSTADesc.ucIsEseSta))
   else
   {
       pw80211Header->wFrmCtrl.subType  = 0;
-      tlMetaInfo->ucUP = 0;
-      tlMetaInfo->ucTID = 0;
 
   // NO NO NO - there is not enough memory allocated to write the QOS ctrl  
   // field, it will overwrite the first 2 bytes of the data packet(LLC header)
@@ -9856,8 +9868,21 @@ if ((0 == w8023Header.usLenType) && (pClientSTA->wSTADesc.ucIsEseSta))
         pw80211Header->wFrmCtrl.toDS          = 0;
         pw80211Header->wFrmCtrl.fromDS        = 0;
 
-        vos_copy_macaddr( (v_MACADDR_t*)&pw80211Header->vA1,
+        /*
+         * If the frame is a multicast frame, then, the Address1
+         * should be the destination address filled in the packet. Which is
+         * the multicast address. Otherwise, set it to BSSID
+         */
+        if (0 == tlMetaInfo->ucBcast && 1 == tlMetaInfo->ucMcast)
+        {
+           vos_copy_macaddr( (v_MACADDR_t*)&pw80211Header->vA1,
                              (v_MACADDR_t*)&w8023Header.vDA);
+        }
+        else
+        {
+           vos_copy_macaddr( (v_MACADDR_t*)&pw80211Header->vA1,
+                 &pClientSTA->wSTADesc.vSTAMACAddress);
+        }
         vos_mem_copy( pw80211Header->vA3,
               &pClientSTA->wSTADesc.vBSSIDforIBSS ,
               VOS_MAC_ADDR_SIZE);

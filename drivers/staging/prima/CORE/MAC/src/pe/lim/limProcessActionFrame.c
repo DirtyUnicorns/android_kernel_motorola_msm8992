@@ -387,42 +387,13 @@ __limProcessOperatingModeActionFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo
     tANI_U32                nStatus;
     tpDphHashNode           pSta;
     tANI_U16                aid;
-    tANI_U8                 operMode;
-    tANI_U32                channelBondingMode;
+    tANI_U8  operMode;
 
     pHdr = WDA_GET_RX_MAC_HEADER(pRxPacketInfo);
     pBody = WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
     frameLen = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
 
-    limLog(pMac, LOG1, FL("Received Operating Mode action frame"));
-
-    if( RF_CHAN_14 >= psessionEntry->currentOperChannel )
-    {
-        channelBondingMode = pMac->roam.configParam.channelBondingMode24GHz;
-    }
-    else
-    {
-        channelBondingMode = pMac->roam.configParam.channelBondingMode5GHz;
-    }
-
-    /* Do not update the channel bonding mode if channel bonding
-     * mode is disabled in INI.
-     */
-    if(WNI_CFG_CHANNEL_BONDING_MODE_DISABLE == channelBondingMode)
-    {
-        limLog(pMac, LOGW,
-            FL("channel bonding disabled"));
-        return;
-    }
-
-    if (( RF_CHAN_14 >= psessionEntry->currentOperChannel )&&
-          !IS_HT40_OBSS_SCAN_FEATURE_ENABLE)
-    {
-        limLog(pMac, LOGW,
-              FL("channel bonding disabled as FW doesn't supoort CB in 2.4gz"));
-        return;
-    }
-
+    PELOG3(limLog(pMac, LOG3, FL("Received Operating Mode action frame"));)
     pOperatingModeframe = vos_mem_malloc(sizeof(*pOperatingModeframe));
     if (NULL == pOperatingModeframe)
     {
@@ -758,15 +729,15 @@ __limProcessDelTsReq(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession pse
             PELOGW(limLog(pMac, LOGW, FL("Ignoring delts request: wme not enabled/capable"));)
             return;
         }
-        limLog(pMac, LOG1, FL("WME Delts received"));
+        PELOG2(limLog(pMac, LOG2, FL("WME Delts received"));)
     }
     else if ((psessionEntry->limQosEnabled) && pSta->lleEnabled)
         {
-        limLog(pMac, LOG1, FL("11e QoS Delts received"));
+        PELOG2(limLog(pMac, LOG2, FL("11e QoS Delts received"));)
         }
     else if ((psessionEntry->limWsmEnabled) && pSta->wsmEnabled)
         {
-        limLog(pMac, LOG1, FL("WSM Delts received"));
+        PELOG2(limLog(pMac, LOG2, FL("WSM Delts received"));)
         }
     else
     {

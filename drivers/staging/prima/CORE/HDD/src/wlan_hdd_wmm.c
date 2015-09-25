@@ -255,73 +255,29 @@ static void hdd_wmm_disable_tl_uapsd (hdd_wmm_qos_context_t* pQosContext)
    WLANTL_ACEnumType acType = pQosContext->acType;
    hdd_wmm_ac_status_t *pAc = &pAdapter->hddWmmStatus.wmmAcStatus[acType];
    VOS_STATUS status;
-   v_U32_t service_interval;
-   v_U32_t suspension_interval;
-   v_U8_t uapsd_mask;
-   v_U8_t ActiveTspec = INVALID_TSPEC;
+
 
    // have we previously enabled UAPSD?
    if (pAc->wmmAcUapsdInfoValid == VOS_TRUE)
    {
-      uapsd_mask = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->UapsdMask;
+      status = WLANTL_DisableUAPSDForAC((WLAN_HDD_GET_CTX(pAdapter))->pvosContext,
+                                        (WLAN_HDD_GET_STATION_CTX_PTR(pAdapter))->conn_info.staId[0],
+                                        acType);
 
-      //Finding uapsd_mask as per AC
-      uapsd_mask = uapsd_mask & (1 << (WLANTL_AC_VO - acType));
-
-      sme_QosTspecActive((tpAniSirGlobal)WLAN_HDD_GET_HAL_CTX(pAdapter), acType,
-                         pAdapter->sessionId, &ActiveTspec);
-
-      //Call WLANTL_EnableUAPSDForAC only when static uapsd mask is present and
-      // no active tspecs. TODO: Need to change naming convention as Enable
-      // UAPSD function is called in hdd_wmm_disable_tl_uapsd. Purpose of
-      // calling WLANTL_EnableUAPSDForAC is to update UAPSD intervals to fw
-
-      if(uapsd_mask && !ActiveTspec)
+      if ( !VOS_IS_STATUS_SUCCESS( status ) )
       {
-         switch(acType)
-         {
-         case WLANTL_AC_VO:
-            service_interval = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->InfraUapsdVoSrvIntv;
-            suspension_interval = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->InfraUapsdVoSuspIntv;
-            break;
-         case WLANTL_AC_VI:
-            service_interval = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->InfraUapsdViSrvIntv;
-            suspension_interval = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->InfraUapsdViSuspIntv;
-            break;
-         case WLANTL_AC_BE:
-            service_interval = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->InfraUapsdBeSrvIntv;
-            suspension_interval = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->InfraUapsdBeSuspIntv;
-            break;
-         case WLANTL_AC_BK:
-            service_interval = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->InfraUapsdBkSrvIntv;
-            suspension_interval = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->InfraUapsdBkSuspIntv;
-            break;
-         }
-
-         status = WLANTL_EnableUAPSDForAC((WLAN_HDD_GET_CTX(pAdapter))->pvosContext,
-                  (WLAN_HDD_GET_STATION_CTX_PTR(pAdapter))->conn_info.staId[0],
-                   acType,
-                   pAc->wmmAcTspecInfo.ts_info.tid,
-                   pAc->wmmAcTspecInfo.ts_info.up,
-                   service_interval,
-                   suspension_interval,
-                   pAc->wmmAcTspecInfo.ts_info.direction);
-
-         if ( !VOS_IS_STATUS_SUCCESS( status ) )
-         {
-            VOS_TRACE( VOS_MODULE_ID_HDD, WMM_TRACE_LEVEL_ERROR,
-                    "%s: Failed to update U-APSD params for AC=%d",
+         VOS_TRACE( VOS_MODULE_ID_HDD, WMM_TRACE_LEVEL_ERROR,
+                    "%s: Failed to disable U-APSD for AC=%d",
                     __func__, acType );
-         }
-         else
-         {
-            // TL no longer has valid UAPSD info
-            pAc->wmmAcUapsdInfoValid = VOS_FALSE;
-            VOS_TRACE(VOS_MODULE_ID_HDD, WMM_TRACE_LEVEL_INFO,
-                   "%s: Updated UAPSD params in TL for AC=%d",
+      }
+      else
+      {
+         // TL no longer has valid UAPSD info
+         pAc->wmmAcUapsdInfoValid = VOS_FALSE;
+         VOS_TRACE(VOS_MODULE_ID_HDD, WMM_TRACE_LEVEL_INFO,
+                   "%s: Disabled UAPSD in TL for AC=%d",
                    __func__,
                    acType);
-         }
       }
    }
 }
@@ -1667,12 +1623,7 @@ VOS_STATUS hdd_wmm_adapter_close ( hdd_adapter_t* pAdapter )
       hdd_wmm_disable_inactivity_timer(pQosContext);
 #endif
 #ifdef WLAN_OPEN_SOURCE
-   if (pQosContext->handle == HDD_WMM_HANDLE_IMPLICIT
-       && pQosContext->magic == HDD_WMM_CTX_MAGIC)
-   {
-
       cancel_work_sync(&pQosContext->wmmAcSetupImplicitQos);
-   }
 #endif
       hdd_wmm_free_context(pQosContext);
    }
@@ -2000,19 +1951,20 @@ v_U16_t hdd_wmm_select_queue(struct net_device * dev, struct sk_buff *skb)
           }
        }
    }
-   /* All traffic will get equal opportuniy to transmit data frames. */
-   /* Get the user priority from IP header & corresponding AC */
-   hdd_wmm_classify_pkt (pAdapter, skb, &ac, &up);
-   /* If 3/4th of BE AC Tx queue is full,
-    * then place the DHCP packet in VOICE AC queue
-    */
-   if (pAdapter->isVosLowResource && is_dhcp_packet(skb))
-   {
-      VOS_TRACE(VOS_MODULE_ID_HDD, WMM_TRACE_LEVEL_WARN,
-                "%s: BestEffort Tx Queue is 3/4th full"
-                " Make DHCP packet's pri as VO", __func__);
-      up = SME_QOS_WMM_UP_VO;
-      ac = hddWmmUpToAcMap[up];
+   // if we don't want QoS or the AP doesn't support Qos
+   // All traffic will get equal opportuniy to transmit data frames.
+   if( hdd_wmm_is_active(pAdapter) ) {
+      /* Get the user priority from IP header & corresponding AC */
+      hdd_wmm_classify_pkt (pAdapter, skb, &ac, &up);
+      //If 3/4th of BE AC Tx queue is full, then place the DHCP packet in VOICE AC queue
+      if (pAdapter->isVosLowResource && is_dhcp_packet(skb))
+      {
+         VOS_TRACE(VOS_MODULE_ID_HDD, WMM_TRACE_LEVEL_WARN,
+                   "%s: BestEffort Tx Queue is 3/4th full"
+                   " Make DHCP packet's pri as VO", __func__);
+         up = SME_QOS_WMM_UP_VO;
+         ac = hddWmmUpToAcMap[up];
+      }
    }
 done:
    skb->priority = up;
@@ -2359,32 +2311,16 @@ VOS_STATUS hdd_wmm_connect( hdd_adapter_t* pAdapter,
           * done with the AddTspec.Here we avoid 11r and ccx based association.
             This change is done only when reassoc to different AP.
           */
-         VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-                      FL( "fReassocReq = %d"
-#if defined (FEATURE_WLAN_ESE)
-                          "isESEAssoc = %d"
-#endif
-#if defined (WLAN_FEATURE_VOWIFI_11R)
-                          "is11rAssoc = %d"
-#endif
-                        ),
-                        pRoamInfo->fReassocReq
-#if defined (FEATURE_WLAN_ESE)
-                        ,pRoamInfo->isESEAssoc
-#endif
-#if defined (WLAN_FEATURE_VOWIFI_11R)
-                        ,pRoamInfo->is11rAssoc
-#endif
-                  );
-
          if ( !pRoamInfo->fReassocReq
 #if defined (WLAN_FEATURE_VOWIFI_11R)
             &&
-            !pRoamInfo->is11rAssoc
+            pRoamInfo->u.pConnectedProfile->AuthType != eCSR_AUTH_TYPE_FT_RSN &&
+            pRoamInfo->u.pConnectedProfile->AuthType != eCSR_AUTH_TYPE_FT_RSN_PSK
 #endif
 #if defined (FEATURE_WLAN_ESE)
             &&
-            !pRoamInfo->isESEAssoc
+            pRoamInfo->u.pConnectedProfile->AuthType != eCSR_AUTH_TYPE_CCKM_WPA &&
+            pRoamInfo->u.pConnectedProfile->AuthType != eCSR_AUTH_TYPE_CCKM_RSN
 #endif
             )
          {
@@ -2562,12 +2498,8 @@ hdd_wlan_wmm_status_e hdd_wmm_addts( hdd_adapter_t* pAdapter,
           return HDD_WLAN_WMM_STATUS_MODIFY_FAILED;
       }
 
-      mutex_lock(&pAdapter->hddWmmStatus.wmmLock);
-      if (pQosContext->magic == HDD_WMM_CTX_MAGIC)
-      {
-          pQosContext->lastStatus = status;
-      }
-      mutex_unlock(&pAdapter->hddWmmStatus.wmmLock);
+      // we were successful, save the status
+      pQosContext->lastStatus = status;
       return status;
    }
 
@@ -2655,12 +2587,7 @@ hdd_wlan_wmm_status_e hdd_wmm_addts( hdd_adapter_t* pAdapter,
 #endif
 
    // we were successful, save the status
-   mutex_lock(&pAdapter->hddWmmStatus.wmmLock);
-   if (pQosContext->magic == HDD_WMM_CTX_MAGIC)
-   {
-         pQosContext->lastStatus = status;
-   }
-   mutex_unlock(&pAdapter->hddWmmStatus.wmmLock);
+   pQosContext->lastStatus = status;
 
    return status;
 }
@@ -2770,12 +2697,7 @@ hdd_wlan_wmm_status_e hdd_wmm_delts( hdd_adapter_t* pAdapter,
    }
 
 #endif
-   mutex_lock(&pAdapter->hddWmmStatus.wmmLock);
-   if (pQosContext->magic == HDD_WMM_CTX_MAGIC)
-   {
-         pQosContext->lastStatus = status;
-   }
-   mutex_unlock(&pAdapter->hddWmmStatus.wmmLock);
+   pQosContext->lastStatus = status;
    return status;
 }
 

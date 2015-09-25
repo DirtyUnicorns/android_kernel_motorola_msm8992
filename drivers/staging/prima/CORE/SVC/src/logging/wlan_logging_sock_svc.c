@@ -30,7 +30,6 @@
  *
  ******************************************************************************/
 #ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
-#include <linux/rtc.h>
 #include <vmalloc.h>
 #include <wlan_nlink_srv.h>
 #include <vos_status.h>
@@ -51,6 +50,7 @@
 #define INVALID_PID -1
 
 #define MAX_LOGMSG_LENGTH 4096
+#define SECONDS_IN_A_DAY (86400)
 
 struct log_msg {
 	struct list_head node;
@@ -84,8 +84,6 @@ struct wlan_logging {
 	struct completion   shutdown_comp;
 	/* Indicates to logger thread to exit */
 	bool exit;
-	/* wakeup indication */
-	bool wakeEvent;
 	/* Holds number of dropped logs*/
 	unsigned int drop_count;
 	/* current logbuf to which the log will be filled to */
@@ -296,8 +294,6 @@ int wlan_log_to_user(VOS_TRACE_LEVEL log_level, char *to_be_sent, int length)
 	unsigned long flags;
 
 	struct timeval tv;
-	struct rtc_time tm;
-	unsigned long local_time;
 
 	if (gapp_pid == INVALID_PID) {
 		/*
@@ -311,25 +307,20 @@ int wlan_log_to_user(VOS_TRACE_LEVEL log_level, char *to_be_sent, int length)
 		pr_err("%s\n", to_be_sent);
 	}
 
-	/* Format the Log time [hr:min:sec.microsec] */
+	/* Format the Log time [Secondselapsedinaday.microseconds] */
 	do_gettimeofday(&tv);
-
-	/* Convert rtc to local time */
-	local_time = (u32)(tv.tv_sec - (sys_tz.tz_minuteswest * 60));
-	rtc_time_to_tm(local_time, &tm);
-	tlen = snprintf(tbuf, sizeof(tbuf), "[%s] [%02d:%02d:%02d.%06lu] ",
-			current->comm, tm.tm_hour, tm.tm_min, tm.tm_sec,
+	tlen = snprintf(tbuf, sizeof(tbuf), "[%s][%5lu.%06lu] ", current->comm,
+			(unsigned long) (tv.tv_sec%SECONDS_IN_A_DAY),
 			tv.tv_usec);
 
 	/* 1+1 indicate '\n'+'\0' */
 	total_log_len = length + tlen + 1 + 1;
 
 	spin_lock_irqsave(&gwlan_logging.spin_lock, flags);
-
 	// wlan logging svc resources are not yet initialized
 	if (!gwlan_logging.pcur_node) {
-	    spin_unlock_irqrestore(&gwlan_logging.spin_lock, flags);
-	    return -EIO;
+		spin_unlock_irqrestore(&gwlan_logging.spin_lock, flags);
+		return -EIO;
 	}
 
 	pfilled_length = &gwlan_logging.pcur_node->filled_length;
@@ -374,7 +365,6 @@ int wlan_log_to_user(VOS_TRACE_LEVEL log_level, char *to_be_sent, int length)
                  * register for the logs.
                  */
 		if ( (gapp_pid != INVALID_PID)) {
-			gwlan_logging.wakeEvent = TRUE;
 			wake_up_interruptible(&gwlan_logging.wait_queue);
 		}
 		else {
@@ -470,7 +460,6 @@ static int send_filled_buffers_to_user(void)
 			gapp_pid = INVALID_PID;
 			clear_default_logtoapp_log_level();
 			wlan_logging_srv_nl_ready_indication();
-			break;
 		} else {
 			skb = NULL;
 			ret = 0;
@@ -500,9 +489,8 @@ static int wlan_logging_thread(void *Arg)
 	while (!gwlan_logging.exit) {
 		ret_wait_status = wait_event_interruptible(
 		    gwlan_logging.wait_queue,
-		    (gwlan_logging.wakeEvent || gwlan_logging.exit));
-
-		gwlan_logging.wakeEvent = FALSE;
+		    (!list_empty(&gwlan_logging.filled_list)
+		  || gwlan_logging.exit));
 
 		if (ret_wait_status == -ERESTARTSYS) {
 			pr_err("%s: wait_event_interruptible returned -ERESTARTSYS",
@@ -511,18 +499,18 @@ static int wlan_logging_thread(void *Arg)
 		}
 
 		if (gwlan_logging.exit) {
-		    pr_err("%s: Exiting the thread\n", __func__);
-		    break;
+			pr_err("%s: Exiting the thread\n", __func__);
+			break;
 		}
 
 		if (INVALID_PID == gapp_pid) {
-		    pr_err("%s: Invalid PID\n", __func__);
-		    continue;
+			pr_err("%s: Invalid PID\n", __func__);
+			continue;
 		}
 
 		ret = send_filled_buffers_to_user();
 		if (-ENOMEM == ret) {
-		    msleep(200);
+			msleep(200);
 		}
 	}
 
@@ -564,7 +552,6 @@ static int wlan_logging_proc_sock_rx_msg(struct sk_buff *skb)
 			wlan_queue_logmsg_for_app();
 		}
 		spin_unlock_bh(&gwlan_logging.spin_lock);
-		gwlan_logging.wakeEvent = TRUE;
 		wake_up_interruptible(&gwlan_logging.wait_queue);
 	} else {
 		/* This is to set the default levels (WLAN logging
@@ -622,7 +609,6 @@ int wlan_logging_sock_activate_svc(int log_fe_to_console, int num_buf)
 
 	init_waitqueue_head(&gwlan_logging.wait_queue);
 	gwlan_logging.exit = false;
-	gwlan_logging.wakeEvent = FALSE;
 	init_completion(&gwlan_logging.shutdown_comp);
 	gwlan_logging.thread = kthread_create(wlan_logging_thread, NULL,
 					"wlan_logging_thread");

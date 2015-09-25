@@ -56,8 +56,6 @@
 #include "wlan_nv_parser.h"
 #include "wlan_hdd_main.h"
 #include <net/cfg80211.h>
-#include <linux/firmware.h>
-#include <linux/vmalloc.h>
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 #define IEEE80211_CHAN_NO_80MHZ		1<<7
@@ -549,7 +547,6 @@ nvEFSTable_t *gnvEFSTable;
 /* EFS Table  to send the NV structure to HAL*/
 static nvEFSTable_t *pnvEFSTable;
 static v_U8_t *pnvEncodedBuf;
-static v_U8_t *pnvtmpBuf;
 static v_U8_t *pDictFile;
 static v_U8_t *pEncodedBuf;
 static v_SIZE_t nvReadEncodeBufSize;
@@ -1118,26 +1115,15 @@ VOS_STATUS vos_nv_open(void)
 
     status = hdd_request_firmware(WLAN_NV_FILE,
                                   ((VosContextType*)(pVosContext))->pHDDContext,
-                                  (v_VOID_t**)&pnvtmpBuf, &nvReadBufSize);
+                                  (v_VOID_t**)&pnvEncodedBuf, &nvReadBufSize);
 
-    if ((!VOS_IS_STATUS_SUCCESS( status )) || (!pnvtmpBuf))
+    if ((!VOS_IS_STATUS_SUCCESS( status )) || (!pnvEncodedBuf))
     {
        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_FATAL,
                    "%s: unable to download NV file %s",
                    __func__, WLAN_NV_FILE);
        return VOS_STATUS_E_RESOURCES;
     }
-
-    pnvEncodedBuf = (v_U8_t *)vmalloc(nvReadBufSize);
-
-    if (NULL == pnvEncodedBuf) {
-        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                    "%s : failed to allocate memory for NV", __func__);
-        return VOS_STATUS_E_NOMEM;
-    }
-    vos_mem_copy(pnvEncodedBuf, pnvtmpBuf, nvReadBufSize);
-    release_firmware(((hdd_context_t*)((VosContextType*)
-                        (pVosContext))->pHDDContext)->nv);
 
     vos_mem_copy(&magicNumber, &pnvEncodedBuf[sizeof(v_U32_t)], sizeof(v_U32_t));
 
@@ -1516,21 +1502,25 @@ VOS_STATUS vos_nv_open(void)
 error:
     vos_mem_free(pnvEFSTable);
     vos_mem_free(pEncodedBuf);
-    vfree(pnvEncodedBuf);
     return eHAL_STATUS_FAILURE ;
 }
 
 VOS_STATUS vos_nv_close(void)
 {
+    VOS_STATUS status = VOS_STATUS_SUCCESS;
     v_CONTEXT_t pVosContext= NULL;
          /*Get the global context */
     pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
-
-    ((hdd_context_t*)((VosContextType*)(pVosContext))->pHDDContext)->nv = NULL;
+    status = hdd_release_firmware(WLAN_NV_FILE, ((VosContextType*)(pVosContext))->pHDDContext);
+    if ( !VOS_IS_STATUS_SUCCESS( status ))
+    {
+        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+                         "%s : vos_open failed",__func__);
+        return VOS_STATUS_E_FAILURE;
+    }
     vos_mem_free(pnvEFSTable);
     vos_mem_free(pEncodedBuf);
     vos_mem_free(pDictFile);
-    vfree(pnvEncodedBuf);
 
     gnvEFSTable=NULL;
     return VOS_STATUS_SUCCESS;
@@ -3150,82 +3140,6 @@ v_BOOL_t vos_is_nv_country_non_zero()
 
 #ifdef CONFIG_ENABLE_LINUX_REG
 
-static int bw20_ch_index_to_bw40_plus_minus_ch_index(int k,
-                                    eChannnelBondingTypes cbflag )
-{
-   int m = INVALID_RF_CHANNEL;
-   if (k >= RF_CHAN_1 && k <= RF_CHAN_14)
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_1 + RF_CHAN_BOND_3 ;
-      else
-         m = k - RF_CHAN_1 + RF_CHAN_BOND_3 - HT_40MINUS_INDEX ;
-
-      if (m > RF_CHAN_BOND_11)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_3)
-         m = INVALID_RF_CHANNEL;
-   }
-   else if (k >= RF_CHAN_240 && k <= RF_CHAN_216)
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_240 + RF_CHAN_BOND_242 ;
-      else
-         m = k - RF_CHAN_240 + RF_CHAN_BOND_242 - HT_40MINUS_INDEX;
-
-      if (m > RF_CHAN_BOND_214)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_242)
-         m = INVALID_RF_CHANNEL;
-   }
-   else if (k >= RF_CHAN_36 && k <= RF_CHAN_64)
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_36 + RF_CHAN_BOND_38;
-      else
-         m = k - RF_CHAN_36 + RF_CHAN_BOND_38 - HT_40MINUS_INDEX;
-
-      if (m > RF_CHAN_BOND_62)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_38)
-         m = INVALID_RF_CHANNEL;
-   }
-#ifdef FEATURE_WLAN_CH144
-   else if (k >= RF_CHAN_100 && k <= RF_CHAN_144)
-#else
-   else if (k >= RF_CHAN_100 && k <= RF_CHAN_140)
-#endif /* FEATURE_WLAN_CH144 */
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_100 + RF_CHAN_BOND_102;
-      else
-         m = k - RF_CHAN_100 + RF_CHAN_BOND_102 -  HT_40MINUS_INDEX;
-#ifdef FEATURE_WLAN_CH144
-      if (m > RF_CHAN_BOND_142)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_102)
-         m = INVALID_RF_CHANNEL;
-#else
-      if (m > RF_CHAN_BOND_138)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_102)
-         m = INVALID_RF_CHANNEL;
-#endif /* FEATURE_WLAN_CH144 */
-   }
-   else if (k >= RF_CHAN_149 && k <= RF_CHAN_165)
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_149 + RF_CHAN_BOND_151;
-      else
-         m = k - RF_CHAN_149 + RF_CHAN_BOND_151 - HT_40MINUS_INDEX;
-
-      if (m > RF_CHAN_BOND_163)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_151)
-         m = INVALID_RF_CHANNEL;
-   }
-   return m;
-}
 /**------------------------------------------------------------------------
   \brief vos_nv_setRegDomain -
   \param clientCtxt  - Client Context, Not used for PRIMA
@@ -3485,6 +3399,10 @@ int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
               n is internal channel index for corresponding 40MHz channel */
 
             k = m + j;
+            n = bw20_ch_index_to_bw40_ch_index(k);
+
+            if (n == -1)
+                return -1;
 
             /* If the regulatory rules for a country do not explicilty
              * require a passive scan on a frequency, lift the passive
@@ -3536,18 +3454,8 @@ int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
                 }
                 pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[k].enabled =
                     NV_CHANNEL_DISABLE;
-                if (INVALID_RF_CHANNEL !=
-                    (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k , RF_CHAN_BOND_HT40_MINUS)))
-                {
-                    pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
-                       NV_CHANNEL_DISABLE;
-                }
-                if (INVALID_RF_CHANNEL !=
-                    (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k , RF_CHAN_BOND_HT40_PLUS)))
-                {
-                    pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
-                       NV_CHANNEL_DISABLE;
-                }
+                pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
+                    NV_CHANNEL_DISABLE;
             }
             /* nv cannot distinguish between DFS and passive channels */
             else if (wiphy->bands[i]->channels[j].flags &
@@ -3581,55 +3489,22 @@ int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
                 if ((wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_HT40) ==
                                                              IEEE80211_CHAN_NO_HT40 )
                 {
-                   if ( INVALID_RF_CHANNEL !=
-                       (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k, RF_CHAN_BOND_HT40_MINUS)))
-                   {
-                       pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
+                   pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
                         NV_CHANNEL_DISABLE;
-                   }
-                   if ( INVALID_RF_CHANNEL !=
-                      (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k, RF_CHAN_BOND_HT40_PLUS)))
-                   {
-                       pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
-                         NV_CHANNEL_DISABLE;
-                   }
                 }
                 else
                 {
-                    if (!(wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_HT40PLUS))
-                    {
-                      if (INVALID_RF_CHANNEL !=
-                          (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k, RF_CHAN_BOND_HT40_PLUS)))
-                      {
-                          pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
-                            NV_CHANNEL_DFS;
+                    pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
+                        NV_CHANNEL_DFS;
 
-                          /* 40MHz channel power is half of 20MHz (-3dB), so subtract 3dB from
-                           * wiphy limits, since wiphy has same limits for 20MHz and 40MHz
-                           * channels
-                           */
-                          pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit =
-                           MIN(gnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit,
+                    /* 40MHz channel power is half of 20MHz (-3dB), so subtract 3dB from
+                     * wiphy limits, since wiphy has same limits for 20MHz and 40MHz
+                     * channels
+                     */
+                    pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit =
+                        MIN(gnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit,
                             (tANI_S8) ((wiphy->bands[i]->channels[j].max_power-3)));
-                      }
-                    }
-                    if (!(wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_HT40MINUS))
-                    {
-                       if (INVALID_RF_CHANNEL !=
-                          (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k, RF_CHAN_BOND_HT40_MINUS)))
-                       {
-                          pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
-                            NV_CHANNEL_DFS;
 
-                          /* 40MHz channel power is half of 20MHz (-3dB), so subtract 3dB from
-                           * wiphy limits, since wiphy has same limits for 20MHz and 40MHz
-                           * channels
-                           */
-                          pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit =
-                           MIN(gnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit,
-                             (tANI_S8) ((wiphy->bands[i]->channels[j].max_power-3)));
-                       }
-                    }
                 }
                 if ((wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_80MHZ) == 0)
                 {
@@ -3675,55 +3550,21 @@ int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
                 if ((wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_HT40) ==
                                                              IEEE80211_CHAN_NO_HT40 )
                 {
-                   if ( INVALID_RF_CHANNEL !=
-                       (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k, RF_CHAN_BOND_HT40_MINUS)))
-                   {
-                       pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
+                   pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
                         NV_CHANNEL_DISABLE;
-                   }
-                   if ( INVALID_RF_CHANNEL !=
-                      (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k, RF_CHAN_BOND_HT40_PLUS)))
-                   {
-                       pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
-                         NV_CHANNEL_DISABLE;
-                   }
                 }
                 else
                 {
-                    if (!(wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_HT40PLUS))
-                    {
-                      if (INVALID_RF_CHANNEL !=
-                          (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k, RF_CHAN_BOND_HT40_PLUS)))
-                      {
-                          pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
-                            NV_CHANNEL_ENABLE;
+                    pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
+                        NV_CHANNEL_ENABLE;
 
-                          /* 40MHz channel power is half of 20MHz (-3dB), so subtract 3dB from
-                           * wiphy limits, since wiphy has same limits for 20MHz and 40MHz
-                           * channels
-                           */
-                          pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit =
-                           MIN(gnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit,
+                    /* 40MHz channel power is half of 20MHz (-3dB), so subtract 3dB from
+                     * wiphy limits, since wiphy has same limits for 20MHz and 40MHz
+                     * channels
+                     */
+                    pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit =
+                        MIN(gnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit,
                             (tANI_S8) ((wiphy->bands[i]->channels[j].max_power-3)));
-                      }
-                    }
-                    if (!(wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_HT40MINUS))
-                    {
-                       if (INVALID_RF_CHANNEL !=
-                            (n = bw20_ch_index_to_bw40_plus_minus_ch_index( k, RF_CHAN_BOND_HT40_MINUS)))
-                       {
-                          pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].enabled =
-                            NV_CHANNEL_ENABLE;
-
-                          /* 40MHz channel power is half of 20MHz (-3dB), so subtract 3dB from
-                           * wiphy limits, since wiphy has same limits for 20MHz and 40MHz
-                           * channels
-                           */
-                          pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit =
-                           MIN(gnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[n].pwrLimit,
-                             (tANI_S8) ((wiphy->bands[i]->channels[j].max_power-3)));
-                       }
-                    }
                 }
                 if ((wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_80MHZ) == 0)
                 {

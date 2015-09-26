@@ -37,6 +37,8 @@ static void power_supply_update_bat_leds(struct power_supply *psy)
 		led_trigger_event(psy->full_trig, LED_FULL);
 		led_trigger_event(psy->charging_blink_full_solid_trig,
 			LED_FULL);
+		led_trigger_blink(psy->blink_trig, &delay_on,
+			&delay_off);
 		break;
 	case POWER_SUPPLY_STATUS_CHARGING:
 		led_trigger_event(psy->charging_full_trig, LED_FULL);
@@ -44,6 +46,8 @@ static void power_supply_update_bat_leds(struct power_supply *psy)
 		led_trigger_event(psy->full_trig, LED_OFF);
 		led_trigger_blink(psy->charging_blink_full_solid_trig,
 			&delay_on, &delay_off);
+		led_trigger_blink(psy->blink_trig, &delay_on,
+			&delay_off);
 		break;
 	default:
 		led_trigger_event(psy->charging_full_trig, LED_OFF);
@@ -51,6 +55,8 @@ static void power_supply_update_bat_leds(struct power_supply *psy)
 		led_trigger_event(psy->full_trig, LED_OFF);
 		led_trigger_event(psy->charging_blink_full_solid_trig,
 			LED_OFF);
+		led_trigger_blink(psy->blink_trig, &delay_on,
+			&delay_off);
 		break;
 	}
 }
@@ -78,6 +84,11 @@ static int power_supply_create_bat_triggers(struct power_supply *psy)
 	if (!psy->charging_blink_full_solid_trig_name)
 		goto charging_blink_full_solid_failed;
 
+	psy->blink_trig_name = kasprintf(GFP_KERNEL,
+		"%s-not-charging-or-charging-blink", psy->name);
+	if (!psy->blink_trig_name)
+		goto charging_blink_full_solid_failed;
+
 	led_trigger_register_simple(psy->charging_full_trig_name,
 				    &psy->charging_full_trig);
 	led_trigger_register_simple(psy->charging_trig_name,
@@ -86,6 +97,8 @@ static int power_supply_create_bat_triggers(struct power_supply *psy)
 				    &psy->full_trig);
 	led_trigger_register_simple(psy->charging_blink_full_solid_trig_name,
 				    &psy->charging_blink_full_solid_trig);
+	led_trigger_register_simple(psy->blink_trig_name,
+				    &psy->blink_trig);
 
 	goto success;
 
@@ -107,6 +120,7 @@ static void power_supply_remove_bat_triggers(struct power_supply *psy)
 	led_trigger_unregister_simple(psy->charging_trig);
 	led_trigger_unregister_simple(psy->full_trig);
 	led_trigger_unregister_simple(psy->charging_blink_full_solid_trig);
+	led_trigger_unregister_simple(psy->blink_trig);
 	kfree(psy->charging_blink_full_solid_trig_name);
 	kfree(psy->full_trig_name);
 	kfree(psy->charging_trig_name);

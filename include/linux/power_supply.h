@@ -271,6 +271,8 @@ struct power_supply {
 	char *online_trig_name;
 	struct led_trigger *charging_blink_full_solid_trig;
 	char *charging_blink_full_solid_trig_name;
+	struct led_trigger *blink_trig;
+	char *blink_trig_name;
 #endif
 };
 

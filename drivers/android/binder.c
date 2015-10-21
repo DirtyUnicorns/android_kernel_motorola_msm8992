@@ -1705,8 +1705,7 @@ static void binder_transaction(struct binder_proc *proc,
 			preempt_disable();
 			wake_up_interruptible_sync(target_wait);
 			sched_preempt_enable_no_resched();
-		}
-		else {
+		} else {
 			wake_up_interruptible(target_wait);
 		}
 	}

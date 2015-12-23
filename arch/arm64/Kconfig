@@ -235,12 +235,38 @@ config MSM8994_V1_PMUIRQ_WA
 	  percpu PMU interrupt is incorrectly connected to the corresponding
 	  CPUs in the other cluster.
 
+config MMI_KINZIE_DTB
+	bool "Motorola Kinzie Device DTBs"
+	depends on ARCH_MSM8994
+	help
+	  Only include Motorola Kinzie specific DTBs to limit the number that
+	  get built during kernel compilation.
+
+	  Kinzie is a Motorola device that uses MSM8994 chipset, which uses the
+	  MSM8994 defconfig.  Due to its many revisions, adding all of the device
+	  trees will consume at least 1MB of space.
+
+	  If unsure, say 'n'.
+
 config ARCH_MSM8992
 	bool "Enable Support for Qualcomm MSM8992"
 	depends on ARCH_MSM
 	help
 	  Enable kernel support for the MSM8992 chipset. If you don't
 	  know what this is, you can safely say 'N' here.
+
+config MMI_CLARK_DTB
+	bool "Motorola Clark Device DTBs"
+	depends on ARCH_MSM8992
+	help
+	  Only include Motorola Clark specific DTBs to limit the number that
+	  get built during kernel compilation.
+
+	  Clark is a Motorola device that uses MSM8992 chipset, which uses the
+	  MSM8992 defconfig.  Due to its many revisions, adding all of the device
+	  trees will consume at least 1MB of space.
+
+	  If unsure, say 'n'.
 
 config ARCH_XGENE
 	bool "AppliedMicro X-Gene SOC Family"

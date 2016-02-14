@@ -42,6 +42,12 @@
 
 #include <linux/motosh.h>
 
+#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+#include <linux/input/doubletap2wake.h>
+#endif
+#endif
+
 struct qd_trace_event_t {
 	u8 op;
 	u8 buffer_id;
@@ -253,12 +259,27 @@ static int motosh_quickpeek_status_ack(struct motosh_data *ps_motosh,
 int motosh_display_handle_touch_locked(struct motosh_data *ps_motosh)
 {
 	char *envp[2];
+#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+        bool prevent_sleep = (dt2w_switch > 0);
+#endif
+#endif
+
 	dev_dbg(&ps_motosh->client->dev, "%s\n", __func__);
+
 
 	envp[0] = "MOTOSHWAKE=TOUCH";
 	envp[1] = NULL;
 	dev_info(&ps_motosh->client->dev,
 		"Sending uevent, MOTOSH TOUCH wake\n");
+
+#ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	/* Dirty hack to prevent touchpanel lockup */
+	if (prevent_sleep)
+		dt2w_switch = 0;
+#endif
+#endif
 
 	if (kobject_uevent_env(&ps_motosh->client->dev.kobj,
 		KOBJ_CHANGE, envp)) {
@@ -266,7 +287,9 @@ int motosh_display_handle_touch_locked(struct motosh_data *ps_motosh)
 			"Failed to create uevent\n");
 		return -EPERM;
 	}
-
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	dt2w_switch = 0;
+#endif
 	return 0;
 }
 

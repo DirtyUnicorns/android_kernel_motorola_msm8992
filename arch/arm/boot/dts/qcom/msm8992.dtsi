@@ -154,7 +154,7 @@
 			};
 		};
 
-		CPU4: cpu@100 {
+		CPU4: cpu@4 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x100>;
@@ -179,7 +179,7 @@
 			};
 		};
 
-		CPU5: cpu@101 {
+		CPU5: cpu@5 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x101>;

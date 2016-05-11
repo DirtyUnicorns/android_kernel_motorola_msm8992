@@ -6822,7 +6822,7 @@ static int synaptics_rmi4_suspend(struct device *dev)
 
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
 #if defined(CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE)
-	if (dt2w_switch) {
+	if (!in_phone_call && dt2w_switch) {
 #endif
 		pr_info("suspend avoided!\n");
 
